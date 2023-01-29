@@ -1,0 +1,27 @@
+import { parentPort, workerData } from "worker_threads";
+import { DynamoStream } from "./stream";
+
+const listeningTables: DynamoStream[] = [];
+
+const { endpoint, waitBeforeInit, watchInterval, tables } = workerData;
+
+DynamoStream.maxWaitTime = waitBeforeInit;
+DynamoStream.endpoint = endpoint;
+DynamoStream.watchInterval = watchInterval;
+
+parentPort!.on("message", async (e) => {
+  const { channel } = e;
+
+  if (channel == "init") {
+    tables.forEach((table: any) => {
+      const dynamoStream = new DynamoStream(table);
+
+      dynamoStream.init();
+
+      dynamoStream.on("records", (records) => {
+        parentPort!.postMessage({ records, TableName: dynamoStream.TableName });
+      });
+      listeningTables.push(dynamoStream);
+    });
+  }
+});

@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "target": "es2018",
+    "module": "CommonJS",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "emitDeclarationOnly": true,
+    "moduleResolution": "nodenext",
+    "removeComments": true,
+    "strict": true,
+    "declarationDir": "./dist/"
+  },
+  "exclude": [
+    "./dist/"
+    // "./src/plugins/ddbstream"
+  ]
+}
