@@ -9,11 +9,13 @@ const workerPath = path.resolve(__dirname, "./worker.js");
 
 export interface Config {
   endpoint?: string;
+  region?: string;
   waitBeforeInit?: number;
   watchInterval?: number;
 }
 const defaultOptions: Config = {
   endpoint: "http://localhost:8000",
+  region: "eu-west-1",
   waitBeforeInit: 25,
   watchInterval: 2,
 };

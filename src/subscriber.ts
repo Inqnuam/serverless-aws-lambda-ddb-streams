@@ -18,7 +18,11 @@ export class Subscriber {
   filterPatterns?: any[];
   #records: any[] = [];
 
-  static #numericCompare = (operator: string, value: number, compareTo: number): boolean => {
+  static #numericCompare = (
+    operator: string,
+    value: number,
+    compareTo: number
+  ): boolean => {
     switch (operator) {
       case "=":
         return value == compareTo;
@@ -43,7 +47,9 @@ export class Subscriber {
       } else if (operatorValue === false) {
         return !(key in record);
       } else {
-        throw new Error("stream filter 'exists' value must be 'true' or 'false'");
+        throw new Error(
+          "stream filter 'exists' value must be 'true' or 'false'"
+        );
       }
     },
     prefix: (record: any, key: string, operatorValue: any) => {
@@ -51,7 +57,10 @@ export class Subscriber {
         throw new Error("stream filter 'prefix' value must be typeof 'string'");
       }
 
-      const val = record[key]?.S ?? typeof record[key] == "string" ? record[key] : undefined;
+      const val =
+        record[key]?.S ?? typeof record[key] == "string"
+          ? record[key]
+          : undefined;
 
       if (val) {
         return val.startsWith(operatorValue);
@@ -59,8 +68,13 @@ export class Subscriber {
       return false;
     },
     numeric: (record: any, key: string, operatorValue: any) => {
-      if (!Array.isArray(operatorValue) || ![2, 4].includes(operatorValue.length)) {
-        throw new Error("stream filter 'numeric' value must an array with 2 or 4 items");
+      if (
+        !Array.isArray(operatorValue) ||
+        ![2, 4].includes(operatorValue.length)
+      ) {
+        throw new Error(
+          "stream filter 'numeric' value must an array with 2 or 4 items"
+        );
       }
 
       if (!(key in record)) {
@@ -69,20 +83,32 @@ export class Subscriber {
 
       const andResult: boolean[] = [];
       const [comparator, value] = operatorValue;
-      andResult.push(Subscriber.#numericCompare(comparator, record[key], value));
+      andResult.push(
+        Subscriber.#numericCompare(comparator, record[key], value)
+      );
 
       if (operatorValue.length == 4) {
         const [, , comparator, value] = operatorValue;
-        andResult.push(Subscriber.#numericCompare(comparator, record[key], value));
+        andResult.push(
+          Subscriber.#numericCompare(comparator, record[key], value)
+        );
       }
 
       return andResult.every((x) => x === true);
     },
     "anything-but": (record: any, key: string, operatorValue: any) => {
-      if (!Array.isArray(operatorValue) || !operatorValue.every((x) => typeof x == "string")) {
-        throw new Error("stream filter 'anything-but' value must an array of string");
+      if (
+        !Array.isArray(operatorValue) ||
+        !operatorValue.every((x) => typeof x == "string")
+      ) {
+        throw new Error(
+          "stream filter 'anything-but' value must an array of string"
+        );
       }
-      const val = record[key]?.S ?? typeof record[key] == "string" ? record[key] : undefined;
+      const val =
+        record[key]?.S ?? typeof record[key] == "string"
+          ? record[key]
+          : undefined;
       if (val) {
         return !operatorValue.includes(val);
       }
@@ -90,7 +116,15 @@ export class Subscriber {
       return false;
     },
   };
-  constructor({ TableName, StreamEnabled, StreamViewType, invoke, batchSize, functionResponseType, filterPatterns }: Config) {
+  constructor({
+    TableName,
+    StreamEnabled,
+    StreamViewType,
+    invoke,
+    batchSize,
+    functionResponseType,
+    filterPatterns,
+  }: Config) {
     this.TableName = TableName;
     this.StreamEnabled = StreamEnabled;
     this.StreamViewType = StreamViewType;
@@ -109,7 +143,9 @@ export class Subscriber {
 
       for (const [opName, opValue] of Object.entries(operator)) {
         if (opName in Subscriber.#expressionOperators) {
-          andConditions.push(Subscriber.#expressionOperators[opName](record, key, opValue));
+          andConditions.push(
+            Subscriber.#expressionOperators[opName](record, key, opValue)
+          );
         }
       }
       return andConditions.every((x) => x === true);
@@ -125,7 +161,9 @@ export class Subscriber {
       let childFilterResult: boolean[] = [];
 
       if (Array.isArray(operator)) {
-        childFilterResult = operator.map((x) => Subscriber.#filter(record, key, x));
+        childFilterResult = operator.map((x) =>
+          Subscriber.#filter(record, key, x)
+        );
       } else if (record[key]) {
         childFilterResult = [Subscriber.#filterObject(operator, record[key])];
       }
@@ -138,7 +176,9 @@ export class Subscriber {
   #filterRecords = (records: any[]) => {
     if (Array.isArray(this.filterPatterns)) {
       return records.filter((x) => {
-        const filterResult = this.filterPatterns!.map((p) => Subscriber.#filterObject(p, x));
+        const filterResult = this.filterPatterns!.map((p) =>
+          Subscriber.#filterObject(p, x)
+        );
         return filterResult.some((x) => x === true);
       });
     } else {
@@ -149,7 +189,12 @@ export class Subscriber {
     for (const record of this.#filterRecords(records)) {
       this.#records.push(record);
       if (this.#records.length == this.batchSize) {
-        await this.invoke({ Records: this.#records });
+        try {
+          await this.invoke({ Records: this.#records });
+        } catch (error) {
+          console.log(error);
+        }
+
         this.#records = [];
       }
     }

@@ -29,6 +29,7 @@ module.exports = defineConfig({
 ```ts
 {
   endpoint?: string; // default "http://localhost:8000"
+  region?: string; // default "eu-west-1"
   waitBeforeInit?: number; // default 25 (secondes)
   watchInterval?: number; // default 2 (secondes)
 }
@@ -36,6 +37,8 @@ module.exports = defineConfig({
 
 - endpoint:  
   local DynamoDB http endpoint
+- region:
+  AWS Region for dynamodb client
 - waitBeforeInit:  
   An error will be thrown if after "waitBeforeInit" the plugin was not able to connect to the Table.
 - watchInterval:  
