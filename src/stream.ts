@@ -25,11 +25,12 @@ export class DynamoStream extends EventEmitter {
   static endpoint: string = "http://localhost:8000";
   static maxWaitTime: number = 25;
   static watchInterval: number = 1;
+  static region: string = "eu-west-1";
   constructor(config = { TableName: "", StreamViewType: undefined }) {
     super();
     const conf = {
       endpoint: DynamoStream.endpoint,
-      region: "local",
+      region: DynamoStream.region,
     };
     this.cli = new DynamoDBClient(conf);
     this.streamCli = new DynamoDBStreamsClient(conf);

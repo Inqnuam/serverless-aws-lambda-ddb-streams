@@ -1,6 +1,6 @@
 {
   "name": "serverless-aws-lambda-ddb-streams",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "DynamoDB Local Stream plugin for serverless-aws-lambda",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",

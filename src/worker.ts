@@ -3,12 +3,12 @@ import { DynamoStream } from "./stream";
 
 const listeningTables: DynamoStream[] = [];
 
-const { endpoint, waitBeforeInit, watchInterval, tables } = workerData;
+const { endpoint, waitBeforeInit, watchInterval, region, tables } = workerData;
 
 DynamoStream.maxWaitTime = waitBeforeInit;
 DynamoStream.endpoint = endpoint;
 DynamoStream.watchInterval = watchInterval;
-
+DynamoStream.region = region;
 parentPort!.on("message", async (e) => {
   const { channel } = e;
 

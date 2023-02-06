@@ -35,6 +35,7 @@ export const dynamoStream = (
             endpoint: mergedConfig.endpoint,
             waitBeforeInit: mergedConfig.waitBeforeInit,
             watchInterval: mergedConfig.watchInterval,
+            region: mergedConfig.region,
             tables: handler.listenableTables,
           },
         });
