@@ -1384,10 +1384,10 @@ serve-static@^1.15.0:
     parseurl "~1.3.3"
     send "0.18.0"
 
-serverless-aws-lambda@^4.2.2:
-  version "4.2.2"
-  resolved "https://registry.yarnpkg.com/serverless-aws-lambda/-/serverless-aws-lambda-4.2.2.tgz#59f0bf161bc9a4fc2268c188880046937c78625b"
-  integrity sha512-P2OsZ1TblhfsjwnQu474TBnFWVhU7SslUlZlTS/AssiWo+4xDxdceMbu+beLB4S+XY52u1oFzv38w8VaN3dQqg==
+serverless-aws-lambda@^4.2.6:
+  version "4.2.6"
+  resolved "https://registry.yarnpkg.com/serverless-aws-lambda/-/serverless-aws-lambda-4.2.6.tgz#ebc8fda9547acbede7574b016a04af68ab632b2d"
+  integrity sha512-GktvhbJBcr6ZZEhK1rg5hG7YPZT4GnkqMcBpx6Fj/xhiPmOD5VVX+fB3KG0ksjd3tLamhkfNFJ2t5dMMBLy9BA==
   dependencies:
     archiver "^5.3.1"
     esbuild "0.16.17"
