@@ -3,31 +3,32 @@ import { execSync } from "child_process";
 
 const shouldWatch = process.env.DEV == "true";
 
-const compileDeclarations = () => {
-  try {
-    execSync("tsc");
-  } catch (error) {
-    console.log(error.output?.[1]?.toString());
-  }
-};
-
-const esBuildConfig = {
+const ctx = await esbuild[shouldWatch ? "context" : "build"]({
+  platform: "node",
+  format: "cjs",
+  target: "ES6",
   bundle: true,
   minify: !shouldWatch,
-  platform: "node",
-  target: "es2018",
-  outdir: "dist",
-  format: "cjs",
   entryPoints: ["./src/index.ts", "./src/worker.ts"],
   external: ["@aws-sdk/client-dynamodb", "@aws-sdk/client-dynamodb-streams"],
-  watch: shouldWatch && {
-    onRebuild: () => {
-      console.log("Compiler rebuild", new Date().toLocaleString());
-      compileDeclarations();
+  outdir: "dist",
+  plugins: [
+    {
+      name: "dummy",
+      setup(build) {
+        build.onEnd(() => {
+          console.log("Compiler rebuild", new Date().toLocaleString());
+          try {
+            execSync("tsc");
+          } catch (error) {
+            console.log(error.output?.[1]?.toString());
+          }
+        });
+      },
     },
-  },
-};
+  ],
+});
 
-const result = await esbuild.build(esBuildConfig);
-compileDeclarations();
-console.log(result);
+if (shouldWatch) {
+  await ctx.watch();
+}
