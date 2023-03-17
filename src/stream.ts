@@ -2,8 +2,6 @@ import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, 
 import { DynamoDBClient, DescribeTableCommand, UpdateTableCommand, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
 import EventEmitter from "events";
 
-// TODO: handle ExpiredIteratorException
-
 export class DynamoStream extends EventEmitter {
   cli: DynamoDBClient;
   streamCli: DynamoDBStreamsClient;
@@ -53,7 +51,6 @@ export class DynamoStream extends EventEmitter {
     });
 
     const { StreamDescription } = await this.streamCli.send(cmd);
-
     return StreamDescription;
   }
   async getLatestSequenceNumber(Shard: Shard, StreamArn: string) {
@@ -109,13 +106,28 @@ export class DynamoStream extends EventEmitter {
     let iterator = ShardIterator;
 
     const watcher = setInterval(async () => {
-      const { NextShardIterator, Records } = await this.getRecords(iterator);
-      if (NextShardIterator) {
-        iterator = NextShardIterator;
-      }
+      try {
+        const { NextShardIterator, Records } = await this.getRecords(iterator);
+        if (NextShardIterator) {
+          iterator = NextShardIterator;
+        }
 
-      if (Records?.length) {
-        this.emit("records", Records);
+        if (Records?.length) {
+          const dummyDate = new Date().toISOString();
+          const DDBStreamBatchInfo = {
+            shardId: Shard.ShardId,
+            startSequenceNumber: Shard.SequenceNumberRange?.StartingSequenceNumber,
+            endSequenceNumber: SequenceNumber,
+            approximateArrivalOfFirstRecord: dummyDate,
+            approximateArrivalOfLastRecord: dummyDate,
+            batchSize: Records.length,
+            streamArn: StreamArn,
+          };
+          this.emit("records", Records, DDBStreamBatchInfo);
+        }
+      } catch (error) {
+        // TODO: handle ExpiredIteratorException
+        console.log(error);
       }
     }, DynamoStream.watchInterval * 1000);
 

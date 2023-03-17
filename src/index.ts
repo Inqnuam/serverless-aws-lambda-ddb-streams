@@ -2,6 +2,7 @@ import type { SlsAwsLambdaPlugin } from "serverless-aws-lambda/defineConfig";
 import { Worker } from "worker_threads";
 import path from "path";
 import { StreamsHandler } from "./streamhandler";
+import { StreamFailure } from "./failure";
 
 let handler: StreamsHandler;
 let worker: Worker;
@@ -15,19 +16,22 @@ export interface Config {
 }
 const defaultOptions: Config = {
   endpoint: "http://localhost:8000",
-  region: "eu-west-1",
+  region: "us-east-1",
   waitBeforeInit: 25,
   watchInterval: 2,
 };
 
-export const dynamoStream = (
-  config: Config = defaultOptions
-): SlsAwsLambdaPlugin => {
-  const mergedConfig: Config = { ...defaultOptions, ...config };
+export const dynamoStream = (config: Config = defaultOptions): SlsAwsLambdaPlugin => {
   return {
     name: "ddblocal-stream",
     onInit: async function () {
       if (!this.isDeploying && !this.isPackaging) {
+        const region = this.serverless.service.provider.region;
+        if (region) {
+          StreamFailure.REGION = region;
+        }
+        const mergedConfig: Config = { ...defaultOptions, region, ...config };
+
         handler = new StreamsHandler(this.serverless, this.lambdas);
 
         worker = new Worker(workerPath, {
@@ -43,7 +47,8 @@ export const dynamoStream = (
       }
     },
     offline: {
-      onReady: async function () {
+      onReady: async function (port) {
+        StreamFailure.LOCAL_PORT = port;
         worker?.postMessage({ channel: "init" });
       },
     },

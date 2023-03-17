@@ -20,7 +20,7 @@ export class StreamsHandler {
 
       if (streamEvents.length) {
         for (const event of streamEvents) {
-          const subscriber = new Subscriber({ ...event, invoke: lambda.invoke });
+          const subscriber = new Subscriber(event, lambda.invoke, lambda.outName);
           this.subscribers.push(subscriber);
         }
       }
@@ -82,10 +82,10 @@ export class StreamsHandler {
     this.ddbStreamTables = ddbStreamTables;
   };
 
-  setRecords = ({ records, TableName }: { records: any[]; TableName: string }) => {
+  setRecords = ({ records, TableName, DDBStreamBatchInfo }: { records: any[]; TableName: string; DDBStreamBatchInfo: any }) => {
     this.subscribers.forEach((x) => {
       if (x.TableName == TableName) {
-        x.setRecords(records);
+        x.setRecords(records, DDBStreamBatchInfo);
       }
     });
   };

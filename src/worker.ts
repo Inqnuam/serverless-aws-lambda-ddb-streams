@@ -18,8 +18,8 @@ parentPort!.on("message", async (e) => {
 
       dynamoStream.init();
 
-      dynamoStream.on("records", (records) => {
-        parentPort!.postMessage({ records, TableName: dynamoStream.TableName });
+      dynamoStream.on("records", (records, DDBStreamBatchInfo) => {
+        parentPort!.postMessage({ records, DDBStreamBatchInfo, TableName: dynamoStream.TableName });
       });
       listeningTables.push(dynamoStream);
     });
