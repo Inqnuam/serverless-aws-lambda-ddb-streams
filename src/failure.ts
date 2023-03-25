@@ -63,7 +63,7 @@ export class StreamFailure {
       Timestamp: new Date().toISOString(),
       SignatureVersion: "1",
       Signature: "fake",
-      SigningCertUrl: "http://localhost:${StreamFailure.LOCAL_PORT}/@sns/SimpleNotificationService-56e67fcb41f6fec09b0196692625d388.pem",
+      SigningCertUrl: `http://localhost:${StreamFailure.LOCAL_PORT}/@sns/SimpleNotificationService-56e67fcb41f6fec09b0196692625d388.pem`,
       UnsubscribeUrl: `http://localhost:${StreamFailure.LOCAL_PORT}/@sns?Action=Unsubscribe&SubscriptionArn=${this.TopicArn}:${randomUUID()}`,
       MessageAttributes: {},
     };
@@ -129,3 +129,35 @@ export class StreamFailure {
     req.end(body);
   }
 }
+const isValidEventId = (id: any) => typeof id == "string" && id.length;
+export const getBatchItemFailures = (records: any[], response?: any) => {
+  if (typeof response === undefined || response === null || (typeof response == "object" && (response.batchItemFailures === null || (Array.isArray(response.batchItemFailures) && !response.batchItemFailures.length)))) {
+    // considered as complete success
+    return;
+  }
+
+  if (typeof response == "object" && Array.isArray(response.batchItemFailures)) {
+    if (response.batchItemFailures.some((x: any) => !x.itemIdentifier || !isValidEventId(x.itemIdentifier) || !records.find((r) => r.eventID == x.itemIdentifier))) {
+      throw new Error("ReportBatchItemFailures: complete failure.");
+    } else {
+      // return failed messages
+
+      const success: string[] = [];
+      const failures: any[] = [];
+      records.forEach((r) => {
+        const foundFailed = response.batchItemFailures.find((x: any) => x.itemIdentifier == r.eventID);
+
+        if (foundFailed) {
+          failures.push(r);
+        } else {
+          success.push(r.eventID);
+        }
+      });
+
+      return {
+        success,
+        failures,
+      };
+    }
+  }
+};

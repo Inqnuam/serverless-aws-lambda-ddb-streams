@@ -1,5 +1,6 @@
 import EventEmitter from "events";
-import { StreamFailure } from "./failure";
+import { StreamFailure, getBatchItemFailures } from "./failure";
+import { Batch } from "./batch";
 
 const sleep = (secondes: number) => new Promise((resolve) => setTimeout(resolve, secondes * 1000));
 
@@ -20,7 +21,7 @@ interface Config {
   };
 }
 
-type Invoke = (event: any, info?: any) => Promise<void>;
+type Invoke = (event: any, info?: any) => Promise<void | any>;
 
 export class Subscriber extends EventEmitter {
   lambdaName: string;
@@ -39,9 +40,9 @@ export class Subscriber extends EventEmitter {
   };
   functionResponseType?: string;
   filterPatterns?: any[];
-  #records: any[] = [];
   failure?: StreamFailure;
   event: any;
+  #batches: Batch[] = [];
   constructor(event: Config, invoke: Invoke, name: string) {
     super();
     this.event = event;
@@ -70,13 +71,38 @@ export class Subscriber extends EventEmitter {
       this.batchWindow = event.batchWindow * 1000;
     }
 
-    let tm = setTimeout(() => {}, 0);
-    this.on("invoke", (DDBStreamBatchInfo: any) => {
-      clearTimeout(tm);
+    this.on("invoke", (record: any, DDBStreamBatchInfo: any) => {
+      const foundBatch = this.#batches.find((x) => !x.closed);
 
-      tm = setTimeout(async () => {
-        await this.prepareInvoke(DDBStreamBatchInfo);
-      }, this.batchWindow);
+      const setRecord = foundBatch?.setRecord(record, DDBStreamBatchInfo);
+      if (!foundBatch || !setRecord) {
+        const batch = new Batch({
+          batchSize: this.batchSize,
+          batchWindow: this.batchWindow,
+          onComplete: async (batch: Batch) => {
+            console.log(`\x1b[35mDynamoDB Stream: ${this.TableName}\x1b[0m`);
+
+            const { state, error } = await this.callLambda(batch);
+
+            if (error) {
+              await this.#handleInvokeError(batch, DDBStreamBatchInfo);
+            }
+
+            const foundIndex = this.#batches.findIndex((x) => x.id == batch.id);
+            if (foundIndex != -1) {
+              this.#batches.splice(foundIndex, 1);
+            }
+          },
+          onRecordExpire: this.failure
+            ? () => {
+                this.failure!.timeout(DDBStreamBatchInfo);
+              }
+            : undefined,
+        });
+
+        this.#batches.push(batch);
+        batch.setRecord(record, DDBStreamBatchInfo);
+      }
     });
   }
   static #numericCompare = (operator: string, value: number, compareTo: number): boolean => {
@@ -207,102 +233,79 @@ export class Subscriber extends EventEmitter {
     const recs = this.#filterRecords(records).filter((x: any) => x);
 
     for (const record of recs) {
-      this.#records.push(record);
-      this.#expireRecord(record.eventID, DDBStreamBatchInfo);
-      this.emit("invoke", DDBStreamBatchInfo);
+      this.emit("invoke", record, DDBStreamBatchInfo);
     }
   };
 
-  async prepareInvoke(DDBStreamBatchInfo: any) {
-    if (!this.#records.length) {
-      return;
-    }
+  async callLambda(batch: Batch, Records?: any[]) {
+    let res: any = {};
 
-    const batches = this.#createBatch(this.#records.slice(), this.batchSize);
-
-    console.log(`\x1b[35mDynamoDB Stream: ${this.TableName}\x1b[0m`);
-    for (const Records of batches) {
-      await this.callLambda(Records, DDBStreamBatchInfo);
-    }
-  }
-  async callLambda(Records: any[], DDBStreamBatchInfo: any) {
     try {
-      await this.invoke({ Records }, { kind: "ddb", event: this.event });
-      Records.forEach((e: any) => this.#clearRecord(e.eventID));
+      const response = await this.invoke({ Records: Records ?? batch.records }, { kind: "ddb", event: this.event });
+
+      res.state = response.state;
+      if (this.functionResponseType == "ReportBatchItemFailures") {
+        const responseItems = getBatchItemFailures(batch.records, response);
+
+        if (responseItems) {
+          const { success, failures } = responseItems;
+          success.forEach((x) => batch.removeRecord(x));
+
+          if (failures.length) {
+            res.error = new Error("has failed items");
+          }
+        } else {
+          batch.records.forEach((e: any) => batch.removeRecord(e.eventID));
+        }
+      } else {
+        batch.records.forEach((e: any) => batch.removeRecord(e.eventID));
+      }
     } catch (error) {
-      await this.#handleInvokeError(Records, DDBStreamBatchInfo);
+      res.error = new Error("Execution error");
     }
+    return res;
   }
-  async #handleInvokeError(Records: any, DDBStreamBatchInfo: any) {
+  async #handleInvokeError(batch: Batch, DDBStreamBatchInfo: any) {
     if (this.maximumRetryAttempts) {
-      return this.#retry(Records, DDBStreamBatchInfo);
+      return this.#retry(batch, DDBStreamBatchInfo);
     }
 
     if (this.maximumRecordAgeInSeconds) {
-      this.#retryUntilTimeout(Records);
+      this.#retryUntilTimeout(batch);
     }
   }
-  async #retryUntilTimeout(Records: any[]) {
-    Records.forEach(async (record) => {
-      while (this.#records.find((x) => x.eventID == record.eventID)) {
-        try {
-          await this.invoke({ Records }, { kind: "ddb", event: this.event });
-          this.#clearRecord(record.eventID);
-        } catch (error) {}
-
-        await sleep(0.6);
-      }
-    });
-  }
-  async #retry(Records: any, DDBStreamBatchInfo: any) {
-    let batches = [Records];
-    if (this.bisectBatchOnFunctionError) {
-      const batchSize = Math.ceil(Records.length / 2);
-      batches = this.#createBatch(Records, batchSize);
+  async #retryUntilTimeout(batch: Batch) {
+    while (batch.records.length) {
+      console.log(`\x1b[35mDynamoDB Stream retry until record expire!: ${this.TableName}\x1b[0m`);
+      await this.callLambda(batch);
+      await sleep(0.6);
     }
-
+  }
+  async #retry(batch: Batch, DDBStreamBatchInfo: any) {
     let totalRetry = 0;
-    retries: while (totalRetry <= this.maximumRetryAttempts!) {
+    retries: while (totalRetry <= this.maximumRetryAttempts! - 1) {
       totalRetry++;
-
-      const failedBatches = [];
-      for (const Records of batches) {
-        try {
-          await this.invoke({ Records }, { kind: "ddb", event: this.event });
-          Records.forEach((e: any) => this.#clearRecord(e.eventID));
-        } catch (error) {
-          failedBatches.push(Records);
-        }
+      let batches = [batch.records];
+      if (this.bisectBatchOnFunctionError) {
+        const batchSize = Math.ceil(batch.records.length / 2);
+        batches = this.#createBatch(batch.records, batchSize);
       }
 
-      batches = failedBatches;
+      console.log(`\x1b[35mDynamoDB Stream retry n°${totalRetry}: ${this.TableName}\x1b[0m`);
+      for (const Records of batches) {
+        await this.callLambda(batch, Records);
+      }
 
-      if (!batches.length) {
+      if (!batch.records.length) {
         break retries;
       }
+      await sleep(0.6);
     }
-    if (this.failure && batches.length && !this.maximumRecordAgeInSeconds) {
+    if (this.failure && batch.records.length && !this.maximumRecordAgeInSeconds) {
       this.failure.unhandled(DDBStreamBatchInfo, totalRetry);
     }
   }
-  #clearRecord(eventID: string) {
-    const foundIndex = this.#records.findIndex((x) => x.eventID == eventID);
 
-    if (foundIndex != -1) {
-      this.#records.splice(foundIndex, 1);
-      return true;
-    }
-  }
-  #expireRecord(eventID: string, DDBStreamBatchInfo: any) {
-    if (!this.maximumRecordAgeInSeconds) {
-      return;
-    }
-    setTimeout(async () => {
-      if (this.#clearRecord(eventID) && this.failure) {
-        this.failure.timeout(DDBStreamBatchInfo);
-      }
-    }, this.maximumRecordAgeInSeconds);
-  }
   #createBatch(records: any, batchSize: number) {
     const batches = [];
 

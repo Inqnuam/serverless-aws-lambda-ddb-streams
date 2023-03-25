@@ -1,4 +1,4 @@
-import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, GetRecordsCommand, Shard, GetShardIteratorCommandInput } from "@aws-sdk/client-dynamodb-streams";
+import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, GetRecordsCommand, Shard, GetShardIteratorCommandInput, ExpiredIteratorException } from "@aws-sdk/client-dynamodb-streams";
 import { DynamoDBClient, DescribeTableCommand, UpdateTableCommand, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
 import EventEmitter from "events";
 
@@ -125,9 +125,12 @@ export class DynamoStream extends EventEmitter {
           };
           this.emit("records", Records, DDBStreamBatchInfo);
         }
-      } catch (error) {
-        // TODO: handle ExpiredIteratorException
-        console.log(error);
+      } catch (error: any) {
+        if (error instanceof ExpiredIteratorException) {
+          console.log("iterator is expired!");
+        } else {
+          console.log("watcher error", error.message, error);
+        }
       }
     }, DynamoStream.watchInterval * 1000);
 
