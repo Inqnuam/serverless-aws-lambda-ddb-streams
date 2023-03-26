@@ -5,7 +5,7 @@ import EventEmitter from "events";
 export class DynamoStream extends EventEmitter {
   cli: DynamoDBClient;
   streamCli: DynamoDBStreamsClient;
-  watchers: NodeJS.Timeout[] = [];
+  watcher?: NodeJS.Timeout;
   TableName: string;
   StreamViewType: string = "NEW_AND_OLD_IMAGES";
   static endpoint: string = "http://localhost:8000";
@@ -74,7 +74,7 @@ export class DynamoStream extends EventEmitter {
     return res.ShardIterator;
   }
   stop() {
-    this.watchers.forEach(clearInterval);
+    clearInterval(this.watcher);
   }
   async #enableStream() {
     try {
@@ -105,7 +105,7 @@ export class DynamoStream extends EventEmitter {
     const ShardIterator = await this.getShardInfo(Shard, StreamArn, SequenceNumber);
     let iterator = ShardIterator;
 
-    const watcher = setInterval(async () => {
+    this.watcher = setInterval(async () => {
       try {
         const { NextShardIterator, Records } = await this.getRecords(iterator);
         if (NextShardIterator) {
@@ -127,13 +127,12 @@ export class DynamoStream extends EventEmitter {
         }
       } catch (error: any) {
         if (error instanceof ExpiredIteratorException) {
-          console.log("iterator is expired!");
+          this.stop();
+          await this.init();
         } else {
-          console.log("watcher error", error.message, error);
+          console.log(error);
         }
       }
     }, DynamoStream.watchInterval * 1000);
-
-    this.watchers.push(watcher);
   }
 }
