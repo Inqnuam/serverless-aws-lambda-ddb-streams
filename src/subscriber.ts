@@ -1,6 +1,7 @@
 import EventEmitter from "events";
 import { StreamFailure, getBatchItemFailures } from "./failure";
 import { Batch } from "./batch";
+import { TumblingWindow } from "./tumbling";
 
 const sleep = (secondes: number) => new Promise((resolve) => setTimeout(resolve, secondes * 1000));
 
@@ -13,6 +14,7 @@ interface Config {
   maximumRetryAttempts?: number;
   maximumRecordAgeInSeconds?: number;
   bisectBatchOnFunctionError?: boolean;
+  tumblingWindowInSeconds?: number;
   functionResponseType?: string;
   filterPatterns?: any[];
   onFailure?: {
@@ -22,6 +24,7 @@ interface Config {
 }
 
 type Invoke = (event: any, info?: any) => Promise<void | any>;
+const ONE_DAY = 86400 * 1000;
 
 export class Subscriber extends EventEmitter {
   lambdaName: string;
@@ -32,8 +35,9 @@ export class Subscriber extends EventEmitter {
   batchSize: number;
   batchWindow: number;
   maximumRetryAttempts?: number;
-  maximumRecordAgeInSeconds?: number;
+  maximumRecordAgeInSeconds: number = ONE_DAY;
   bisectBatchOnFunctionError?: boolean;
+  tumblingWindowInSeconds?: number;
   onFailure?: {
     kind: "sns" | "sqs";
     name: string;
@@ -55,8 +59,10 @@ export class Subscriber extends EventEmitter {
     this.functionResponseType = event.functionResponseType;
     this.filterPatterns = event.filterPatterns;
     this.bisectBatchOnFunctionError = event.bisectBatchOnFunctionError;
+    this.tumblingWindowInSeconds = event.tumblingWindowInSeconds;
     this.maximumRetryAttempts = event.maximumRetryAttempts;
 
+    console.log("this.tumblingWindowInSeconds", this.tumblingWindowInSeconds);
     if (event.maximumRecordAgeInSeconds) {
       this.maximumRecordAgeInSeconds = event.maximumRecordAgeInSeconds * 1000;
     }
@@ -79,8 +85,9 @@ export class Subscriber extends EventEmitter {
         const batch = new Batch({
           batchSize: this.batchSize,
           batchWindow: this.batchWindow,
+          maximumRecordAgeInSeconds: this.maximumRecordAgeInSeconds,
           onComplete: async (batch: Batch) => {
-            console.log(`\x1b[35mDynamoDB Stream: ${this.TableName}\x1b[0m`);
+            console.log(`\x1b[35mDynamoDB Stream: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
 
             const { state, error } = await this.callLambda(batch);
 
@@ -243,7 +250,10 @@ export class Subscriber extends EventEmitter {
     try {
       const response = await this.invoke({ Records: Records ?? batch.records }, { kind: "ddb", event: this.event });
 
-      res.state = response.state;
+      if (response) {
+        res.state = response.state;
+      }
+
       if (this.functionResponseType == "ReportBatchItemFailures") {
         const responseItems = getBatchItemFailures(batch.records, response);
 
@@ -261,7 +271,7 @@ export class Subscriber extends EventEmitter {
         batch.records.forEach((e: any) => batch.removeRecord(e.eventID));
       }
     } catch (error) {
-      res.error = new Error("Execution error");
+      res.error = error;
     }
     return res;
   }
@@ -269,14 +279,11 @@ export class Subscriber extends EventEmitter {
     if (this.maximumRetryAttempts) {
       return this.#retry(batch, DDBStreamBatchInfo);
     }
-
-    if (this.maximumRecordAgeInSeconds) {
-      this.#retryUntilTimeout(batch);
-    }
+    this.#retryUntilTimeout(batch);
   }
   async #retryUntilTimeout(batch: Batch) {
     while (batch.records.length) {
-      console.log(`\x1b[35mDynamoDB Stream retry until record expire!: ${this.TableName}\x1b[0m`);
+      console.log(`\x1b[35mDynamoDB Stream retry until record expires!: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
       await this.callLambda(batch);
       await sleep(0.6);
     }
@@ -291,7 +298,7 @@ export class Subscriber extends EventEmitter {
         batches = this.#createBatch(batch.records, batchSize);
       }
 
-      console.log(`\x1b[35mDynamoDB Stream retry n°${totalRetry}: ${this.TableName}\x1b[0m`);
+      console.log(`\x1b[35mDynamoDB Stream retry n°${totalRetry}: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
       for (const Records of batches) {
         await this.callLambda(batch, Records);
       }
@@ -301,7 +308,8 @@ export class Subscriber extends EventEmitter {
       }
       await sleep(0.6);
     }
-    if (this.failure && batch.records.length && !this.maximumRecordAgeInSeconds) {
+    if (this.failure && batch.records.length) {
+      batch.records.forEach((e: any) => batch.removeRecord(e.eventID));
       this.failure.unhandled(DDBStreamBatchInfo, totalRetry);
     }
   }

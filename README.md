@@ -29,7 +29,7 @@ module.exports = defineConfig({
 ```ts
 {
   endpoint?: string; // default "http://localhost:8000"
-  region?: string; // default "eu-west-1"
+  region?: string; // based on your serverless.yml or default "eu-west-1"
   waitBeforeInit?: number; // default 25 (secondes)
   watchInterval?: number; // default 2 (secondes)
 }
@@ -115,8 +115,6 @@ functions:
     arn: !GetAtt dynamoTable.StreamArn
 ```
 
-`batchSize` and [filterPatterns](https://docs.aws.amazon.com/lambda/latest/dg/invocation-eventfiltering.html#filtering-syntax) are supported as well.
-
 ```yaml
 functions:
   myAwsomeLambda:
@@ -133,3 +131,23 @@ functions:
                     N:
                       - numeric: [">", 4]
 ```
+
+### Supported configurations
+
+✅ supported  
+🌕 planned  
+❌ not planned
+
+- ✅ batchSize
+- ✅ batchWindow
+- ✅ bisectBatchOnFunctionError
+- ✅ destinations (requires [AWS Local SNS](https://github.com/Inqnuam/serverless-aws-lambda/blob/main/resources/sns.md) and/or [AWS Local SQS](https://github.com/Inqnuam/serverless-aws-lambda/blob/main/resources/sqs.md))
+- ✅ enabled
+- ✅ filterPatterns
+- ✅ functionResponseType
+- ✅ maximumRecordAgeInSeconds
+- ✅ maximumRetryAttempts
+- ❌ startingPosition (uses always "LATEST")
+- ❌ startingPositionTimestamp
+- ✅ tumblingWindowInSeconds
+- ❌ parallelizationFactor

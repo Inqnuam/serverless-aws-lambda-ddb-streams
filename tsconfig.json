@@ -11,8 +11,5 @@
     "strict": true,
     "declarationDir": "./dist/"
   },
-  "exclude": [
-    "./dist/"
-    // "./src/plugins/ddbstream"
-  ]
+  "exclude": ["./dist/"]
 }

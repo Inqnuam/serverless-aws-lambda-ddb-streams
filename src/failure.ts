@@ -9,10 +9,14 @@ export class StreamFailure {
   getTimeoutBody: (DDBStreamBatchInfo: any, approximateInvokeCount: number) => string;
   getUnhandledBody: (DDBStreamBatchInfo: any, approximateInvokeCount: number) => string;
   createRequest: () => ClientRequest;
+  kind: "sns" | "sqs";
+  name: string;
   static LOCAL_PORT = 3000;
   static REGION = "eu-west-1";
   constructor({ kind, name }: { kind: "sns" | "sqs"; name: string }, lambdaName: string) {
     this.functionArn = `arn:aws:lambda:${StreamFailure.REGION}:000000000000:function:${lambdaName}`;
+    this.kind = kind;
+    this.name = name;
     if (kind == "sns") {
       this.TopicArn = `arn:aws:sns:${StreamFailure.REGION}:000000000000:${name}`;
       this.getTimeoutBody = this.timeoutFailureSnsMsg;
@@ -121,11 +125,13 @@ export class StreamFailure {
   timeout(DDBStreamBatchInfo: any) {
     const body = this.getTimeoutBody(DDBStreamBatchInfo, 1);
     const req = this.createRequest();
+    console.log(`\x1b[35mDynamoDB Stream expire failure: calling onFailure > ${this.kind.toUpperCase()} ${this.name}\x1b[0m`);
     req.end(body);
   }
   unhandled(DDBStreamBatchInfo: any, approximateInvokeCount: number) {
     const body = this.getUnhandledBody(DDBStreamBatchInfo, approximateInvokeCount);
     const req = this.createRequest();
+    console.log(`\x1b[35mDynamoDB Stream unhandled failure: calling onFailure > ${this.kind.toUpperCase()} ${this.name}\x1b[0m`);
     req.end(body);
   }
 }
