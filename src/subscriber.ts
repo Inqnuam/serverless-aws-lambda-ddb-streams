@@ -47,6 +47,7 @@ export class Subscriber extends EventEmitter {
   failure?: StreamFailure;
   event: any;
   #batches: Batch[] = [];
+  #tumblings: TumblingWindow[] = [];
   constructor(event: Config, invoke: Invoke, name: string) {
     super();
     this.event = event;
@@ -62,7 +63,6 @@ export class Subscriber extends EventEmitter {
     this.tumblingWindowInSeconds = event.tumblingWindowInSeconds;
     this.maximumRetryAttempts = event.maximumRetryAttempts;
 
-    console.log("this.tumblingWindowInSeconds", this.tumblingWindowInSeconds);
     if (event.maximumRecordAgeInSeconds) {
       this.maximumRecordAgeInSeconds = event.maximumRecordAgeInSeconds * 1000;
     }
@@ -86,18 +86,24 @@ export class Subscriber extends EventEmitter {
           batchSize: this.batchSize,
           batchWindow: this.batchWindow,
           maximumRecordAgeInSeconds: this.maximumRecordAgeInSeconds,
-          onComplete: async (batch: Batch) => {
+          tumbling: this.#getTumbling(DDBStreamBatchInfo),
+          onComplete: async (batch: Batch, isFinalInvokeForWindow: boolean) => {
             console.log(`\x1b[35mDynamoDB Stream: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
 
-            const { state, error } = await this.callLambda(batch);
+            const { error } = await this.callLambda(batch);
 
             if (error) {
               await this.#handleInvokeError(batch, DDBStreamBatchInfo);
             }
-
-            const foundIndex = this.#batches.findIndex((x) => x.id == batch.id);
-            if (foundIndex != -1) {
-              this.#batches.splice(foundIndex, 1);
+            if (isFinalInvokeForWindow) {
+              const foundIndex = this.#batches.findIndex((x) => x == batch);
+              if (foundIndex != -1) {
+                const foundTumblingIndex = this.#tumblings.findIndex((x) => x == this.#batches[foundIndex].tumbling);
+                if (foundTumblingIndex != -1) {
+                  this.#tumblings.splice(foundTumblingIndex, 1);
+                }
+                this.#batches.splice(foundIndex, 1);
+              }
             }
           },
           onRecordExpire: this.failure
@@ -248,10 +254,10 @@ export class Subscriber extends EventEmitter {
     let res: any = {};
 
     try {
-      const response = await this.invoke({ Records: Records ?? batch.records }, { kind: "ddb", event: this.event });
+      const response = await this.invoke(batch.getStreamEvent(Records), { kind: "ddb", event: this.event });
 
-      if (response) {
-        res.state = response.state;
+      if (this.tumblingWindowInSeconds) {
+        batch.tumbling!.setState(response.state);
       }
 
       if (this.functionResponseType == "ReportBatchItemFailures") {
@@ -324,4 +330,17 @@ export class Subscriber extends EventEmitter {
 
     return batches;
   }
+
+  #getTumbling = ({ shardId, streamArn }: any) => {
+    if (this.tumblingWindowInSeconds) {
+      const foundTumbling = this.#tumblings.find((x) => !x.isFinalInvokeForWindow && x.shardId == shardId);
+      if (foundTumbling) {
+        return foundTumbling;
+      } else {
+        const tumbling = new TumblingWindow({ shardId, eventSourceARN: streamArn, tumblingWindowInSeconds: this.tumblingWindowInSeconds });
+        this.#tumblings.push(tumbling);
+        return tumbling;
+      }
+    }
+  };
 }

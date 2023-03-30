@@ -1,20 +1,19 @@
-import { randomUUID } from "crypto";
 import type { TumblingWindow } from "./tumbling";
+
 interface IBatchConfig {
   batchSize: number;
   batchWindow: number;
   maximumRecordAgeInSeconds: number;
-  onComplete: (batch: Batch) => void;
+  onComplete: (batch: Batch, isFinalInvokeForWindow: boolean) => void;
   onRecordExpire?: (DDBStreamBatchInfo: any) => void;
   tumbling?: TumblingWindow;
 }
 
 export class Batch {
-  id: string;
   #batchSize: number;
   #batchWindow: number;
   maximumRecordAgeInSeconds: number;
-  onComplete: (batch: Batch) => void;
+  onComplete: (batch: Batch, isFinalInvokeForWindow: boolean) => void;
   onRecordExpire?: (DDBStreamBatchInfo: any) => void;
   records: any[] = [];
   closed: boolean = false;
@@ -24,21 +23,38 @@ export class Batch {
   } = {};
 
   #tmBatch?: NodeJS.Timeout;
+  getStreamEvent: (records?: any[]) => any;
   constructor({ batchSize, batchWindow, onComplete, onRecordExpire, maximumRecordAgeInSeconds, tumbling }: IBatchConfig) {
-    this.id = randomUUID();
     this.maximumRecordAgeInSeconds = maximumRecordAgeInSeconds;
     this.#batchSize = batchSize;
     this.#batchWindow = batchWindow;
     this.onComplete = onComplete;
     this.onRecordExpire = onRecordExpire;
     this.tumbling = tumbling;
+
+    if (this.tumbling) {
+      this.getStreamEvent = (records?: any[]) => {
+        return this.tumbling!.getTimeWindowEvent(records ?? this.records);
+      };
+      if (!this.tumbling.onComplete) {
+        this.tumbling.onComplete = () => {
+          this.onComplete(this, true);
+        };
+      }
+    } else {
+      this.getStreamEvent = (records?: any[]) => {
+        return {
+          Records: records ?? this.records,
+        };
+      };
+    }
   }
 
   #setClosed() {
     if (this.records.length == this.#batchSize) {
       this.closed = true;
       clearTimeout(this.#tmBatch);
-      this.onComplete(this);
+      this.onComplete(this, false);
     }
   }
   setRecord(record: any, DDBStreamBatchInfo: any) {
@@ -54,7 +70,7 @@ export class Batch {
       this.#tmBatch = setTimeout(() => {
         if (!this.closed) {
           this.closed = true;
-          this.onComplete(this);
+          this.onComplete(this, false);
         }
       }, this.#batchWindow);
     }
