@@ -11,17 +11,21 @@ parentPort!.on("message", async (e) => {
   const { channel } = e;
 
   if (channel == "init") {
-    tables.forEach(async (table: any) => {
-      try {
-        const dynamoStream = new DynamoStream(table);
-        await dynamoStream.init();
+    await Promise.all(
+      tables.map(async (table: any) => {
+        try {
+          const dynamoStream = new DynamoStream(table);
+          await dynamoStream.init();
 
-        dynamoStream.on("records", (records, DDBStreamBatchInfo) => {
-          parentPort!.postMessage({ records, DDBStreamBatchInfo, TableName: dynamoStream.TableName });
-        });
-      } catch (error) {
-        console.log(error);
-      }
-    });
+          dynamoStream.on("records", (records, DDBStreamBatchInfo) => {
+            parentPort!.postMessage({ records, DDBStreamBatchInfo, TableName: dynamoStream.TableName });
+          });
+        } catch (error) {
+          console.log(error);
+        }
+      })
+    );
+
+    parentPort!.postMessage({ channel: "ready" });
   }
 });

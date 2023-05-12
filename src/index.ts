@@ -1,12 +1,12 @@
 import type { SlsAwsLambdaPlugin } from "serverless-aws-lambda/defineConfig";
 import { Worker } from "worker_threads";
-import path from "path";
 import { StreamsHandler } from "./streamhandler";
 import { StreamFailure } from "./failure";
+// @ts-ignore
+import workerPath from "resolvedPaths";
 
 let handler: StreamsHandler;
 let worker: Worker;
-const workerPath = path.resolve(__dirname, "./worker.js");
 
 export interface Config {
   endpoint?: string;
@@ -22,8 +22,26 @@ const defaultOptions: Config = {
 };
 
 export const dynamoStream = (config: Config = defaultOptions): SlsAwsLambdaPlugin => {
+  const dynamoOnReady: Function[] = [];
+
+  const notifyReadyState = async () => {
+    for (const fn of dynamoOnReady) {
+      try {
+        await fn();
+      } catch (error) {}
+    }
+  };
   return {
     name: "ddblocal-stream",
+    pluginData: {
+      onReady: (cb: Function) => {
+        if (typeof cb == "function") {
+          dynamoOnReady.push(cb);
+        } else {
+          console.warn("onReady callback must be a function");
+        }
+      },
+    },
     onInit: async function () {
       if (!this.isDeploying && !this.isPackaging) {
         const region = this.serverless.service.provider.region;
@@ -43,8 +61,17 @@ export const dynamoStream = (config: Config = defaultOptions): SlsAwsLambdaPlugi
             tables: handler.listenableTables,
           },
         });
-        worker.on("message", handler.setRecords);
+        worker.on("message", async (msg) => {
+          if (msg.channel == "ready") {
+            await notifyReadyState();
+          } else {
+            handler.setRecords(msg);
+          }
+        });
       }
+    },
+    onExit: () => {
+      worker?.terminate();
     },
     offline: {
       onReady: async function (port) {

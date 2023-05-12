@@ -2,8 +2,12 @@ import esbuild from "esbuild";
 import { execSync } from "child_process";
 
 const shouldWatch = process.env.DEV == "true";
+const cwd = process.cwd();
 
-const ctx = await esbuild[shouldWatch ? "context" : "build"]({
+const commonDirName = `${cwd}/src/common.ts`;
+const esmDirName = `${cwd}/src/esm.ts`;
+
+const buildOptions = {
   platform: "node",
   format: "cjs",
   target: "ES6",
@@ -16,6 +20,12 @@ const ctx = await esbuild[shouldWatch ? "context" : "build"]({
     {
       name: "dummy",
       setup(build) {
+        const { format } = build.initialOptions;
+        build.onResolve({ filter: /^resolvedPaths$/ }, (args) => {
+          return {
+            path: format == "esm" ? esmDirName : commonDirName,
+          };
+        });
         build.onEnd(() => {
           console.log("Compiler rebuild", new Date().toLocaleString());
           try {
@@ -27,8 +37,11 @@ const ctx = await esbuild[shouldWatch ? "context" : "build"]({
       },
     },
   ],
-});
+};
 
+const cjs = await esbuild[shouldWatch ? "context" : "build"](buildOptions);
+const esm = await esbuild[shouldWatch ? "context" : "build"]({ ...buildOptions, format: "esm", outExtension: { ".js": ".mjs" }, target: "ES2020" });
 if (shouldWatch) {
-  await ctx.watch();
+  await cjs.watch();
+  await esm.watch();
 }
