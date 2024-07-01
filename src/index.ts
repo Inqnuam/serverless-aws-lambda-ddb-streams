@@ -4,24 +4,21 @@ import { StreamsHandler } from "./streamhandler";
 import { StreamFailure } from "./failure";
 // @ts-ignore
 import workerPath from "resolvedPaths";
+import type { DynamoDBClientConfig } from "@aws-sdk/client-dynamodb";
 
 let handler: StreamsHandler;
 let worker: Worker;
 
 export interface Config {
-  endpoint?: string;
-  region?: string;
   waitBeforeInit?: number;
   watchInterval?: number;
 }
 const defaultOptions: Config = {
-  endpoint: "http://localhost:8000",
-  region: "us-east-1",
   waitBeforeInit: 25,
   watchInterval: 2,
 };
 
-export const dynamoStream = (config: Config = defaultOptions): SlsAwsLambdaPlugin => {
+export const dynamoStream = (clientConfig?: DynamoDBClientConfig | null, config: Config = defaultOptions): SlsAwsLambdaPlugin => {
   const dynamoOnReady: Function[] = [];
 
   const notifyReadyState = async () => {
@@ -48,17 +45,16 @@ export const dynamoStream = (config: Config = defaultOptions): SlsAwsLambdaPlugi
         if (region) {
           StreamFailure.REGION = region;
         }
-        const mergedConfig: Config = { ...defaultOptions, region, ...config };
+        const mergedConfig: Config = { ...defaultOptions, ...config };
 
         handler = new StreamsHandler(this.serverless, this.lambdas);
 
         worker = new Worker(workerPath, {
           workerData: {
-            endpoint: mergedConfig.endpoint,
             waitBeforeInit: mergedConfig.waitBeforeInit,
             watchInterval: mergedConfig.watchInterval,
-            region: mergedConfig.region,
             tables: handler.listenableTables,
+            clientConfig: clientConfig,
           },
         });
         worker.on("message", async (msg) => {

@@ -1,5 +1,5 @@
-import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, GetRecordsCommand, Shard, GetShardIteratorCommandInput, ExpiredIteratorException } from "@aws-sdk/client-dynamodb-streams";
-import { DynamoDBClient, DescribeTableCommand, UpdateTableCommand, waitUntilTableExists } from "@aws-sdk/client-dynamodb";
+import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, GetRecordsCommand, type Shard, type GetShardIteratorCommandInput, ExpiredIteratorException, StreamViewType } from "@aws-sdk/client-dynamodb-streams";
+import { DynamoDBClient, DescribeTableCommand, UpdateTableCommand, waitUntilTableExists, type DynamoDBClientConfig } from "@aws-sdk/client-dynamodb";
 import EventEmitter from "events";
 
 export class DynamoStream extends EventEmitter {
@@ -7,19 +7,16 @@ export class DynamoStream extends EventEmitter {
   streamCli: DynamoDBStreamsClient;
   watcher?: NodeJS.Timeout;
   TableName: string;
-  StreamViewType: string = "NEW_AND_OLD_IMAGES";
-  static endpoint: string = "http://localhost:8000";
+  StreamViewType: StreamViewType = "NEW_AND_OLD_IMAGES";
+  #isFirstConnection: boolean = true;
   static maxWaitTime: number = 25;
   static watchInterval: number = 1;
-  static region: string = "eu-west-1";
+  static clientConfig: DynamoDBClientConfig = { endpoint: "http://127.0.0.1:8000", region: "ddblocal", credentials: { accessKeyId: "test", secretAccessKey: "test" } };
   constructor(config = { TableName: "", StreamViewType: undefined }) {
     super();
-    const conf = {
-      endpoint: DynamoStream.endpoint,
-      region: DynamoStream.region,
-    };
-    this.cli = new DynamoDBClient(conf);
-    this.streamCli = new DynamoDBStreamsClient(conf);
+
+    this.cli = new DynamoDBClient(DynamoStream.clientConfig);
+    this.streamCli = new DynamoDBStreamsClient(DynamoStream.clientConfig);
     this.TableName = config.TableName;
 
     if (config.StreamViewType) {
@@ -34,6 +31,10 @@ export class DynamoStream extends EventEmitter {
     const StreamDescription = await this.describeStream(LatestStreamArn!);
 
     const { Shards, StreamArn } = StreamDescription!;
+    if (this.#isFirstConnection) {
+      console.log(`✅ Successfully connected to Table "${this.TableName}"`);
+      this.#isFirstConnection = false;
+    }
 
     if (StreamArn && Shards?.length) {
       await this.watch(Shards[Shards.length - 1], StreamArn);

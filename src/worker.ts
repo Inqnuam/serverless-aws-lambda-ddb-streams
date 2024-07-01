@@ -1,12 +1,14 @@
 import { parentPort, workerData } from "worker_threads";
 import { DynamoStream } from "./stream";
 
-const { endpoint, waitBeforeInit, watchInterval, region, tables } = workerData;
+const { waitBeforeInit, watchInterval, tables, clientConfig } = workerData;
 
 DynamoStream.maxWaitTime = waitBeforeInit;
-DynamoStream.endpoint = endpoint;
 DynamoStream.watchInterval = watchInterval;
-DynamoStream.region = region;
+if (clientConfig) {
+  DynamoStream.clientConfig = clientConfig;
+}
+
 parentPort!.on("message", async (e) => {
   const { channel } = e;
 

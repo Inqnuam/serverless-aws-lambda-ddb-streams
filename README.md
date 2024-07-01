@@ -16,46 +16,39 @@ use [serverless-aws-lambda's](https://github.com/Inqnuam/serverless-aws-lambda) 
 
 ```js
 // config.js
-const { defineConfig } = require("serverless-aws-lambda/defineConfig");
-const { dynamoStream } = require("serverless-aws-lambda-ddb-streams");
+import { defineConfig } from "serverless-aws-lambda/defineConfig";
+import { dynamoStream } from "serverless-aws-lambda-ddb-streams";
 
-module.exports = defineConfig({
-  plugins: [dynamoStream()],
+export default defineConfig({
+  plugins: [dynamoStream(dynamoDbClientConfig, pluginOptions)],
 });
 ```
 
-### Configuration
+### DynamoDB Client Config
 
-```ts
+[Configuration](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/Package/-aws-sdk-client-dynamodb/Interface/DynamoDBClientConfig/) used to connect to DynamoDB Tables.
+By default the plugin uses following configuration:
+
+```json
 {
-  endpoint?: string; // default "http://localhost:8000"
-  region?: string; // based on your serverless.yml or default "eu-west-1"
-  waitBeforeInit?: number; // default 25 (secondes)
-  watchInterval?: number; // default 2 (secondes)
+  "endpoint": "http://127.0.0.1:8000",
+  "region": "ddblocal",
+  "credentials": { "accessKeyId": "test", "secretAccessKey": "test" }
 }
 ```
 
-- endpoint:  
-  local DynamoDB http endpoint
-- region:
-  AWS Region for dynamodb client
+If after connecting to the table, StreamEnabled is `false`, the plugin will try to enable it.
+
+See [docker-compose.yml](resources/docker-compose.yml) to bootstrap local instance of DynamoDB using Docker.
+
+### Plugin Options
+
 - waitBeforeInit:  
-  An error will be thrown if after "waitBeforeInit" the plugin was not able to connect to the Table.
+  An error will be thrown if after "waitBeforeInit" (in seconds) the plugin was not able to connect to the Table. default 25.
 - watchInterval:  
-  interval to check for new streamable records.
+  interval (in seconds) to check for new streamable records. default 2
 
-example:
-
-```js
-module.exports = defineConfig({
-  plugins: [
-    dynamoStream({
-      endpoint: "http://localhost:8822",
-      waitBeforeInit: 40,
-    }),
-  ],
-});
-```
+### Event Source Mapping
 
 ```yaml
 # serverless.yml
@@ -72,8 +65,8 @@ custom:
 
 provider:
   name: aws
-  runtime: nodejs18.x
-  region: eu-west-3
+  runtime: nodejs20.x
+  region: eu-west-1
 
 functions:
   myAwsomeLambda:
@@ -112,6 +105,7 @@ functions:
 
 ```yaml
 - stream:
+    type: dynamodb
     arn: !GetAtt dynamoTable.StreamArn
 ```
 

@@ -1,15 +1,17 @@
 {
   "compilerOptions": {
     "declaration": true,
-    "target": "es2018",
+    "target": "ESNext",
     "module": "ESNext",
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "emitDeclarationOnly": true,
-    "moduleResolution": "nodenext",
+    "moduleResolution": "Bundler",
     "removeComments": true,
     "strict": true,
-    "declarationDir": "./dist/"
+    "declarationDir": "./dist/",
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true
   },
   "exclude": ["./dist/"]
 }

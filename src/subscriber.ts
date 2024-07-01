@@ -88,7 +88,7 @@ export class Subscriber extends EventEmitter {
           maximumRecordAgeInSeconds: this.maximumRecordAgeInSeconds,
           tumbling: this.#getTumbling(DDBStreamBatchInfo),
           onComplete: async (batch: Batch, isFinalInvokeForWindow: boolean) => {
-            console.log(`\x1b[35mDynamoDB Stream: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
+            console.log(`\x1b[35mDynamoDB Stream:\x1b[0m \x1b[94m${this.TableName}\x1b[0m \x1b[35m|||/\x1b[0m \x1b[33m${this.lambdaName}\x1b[0m`);
 
             const { error } = await this.callLambda(batch);
 
@@ -289,7 +289,7 @@ export class Subscriber extends EventEmitter {
   }
   async #retryUntilTimeout(batch: Batch) {
     while (batch.records.length) {
-      console.log(`\x1b[35mDynamoDB Stream retry until record expires!: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
+      console.log(`\x1b[35mDynamoDB Stream retry until record expires!: ${this.TableName} |||/ ${this.lambdaName}\x1b[0m`);
       await this.callLambda(batch);
       await sleep(0.6);
     }
@@ -304,7 +304,7 @@ export class Subscriber extends EventEmitter {
         batches = this.#createBatch(batch.records, batchSize);
       }
 
-      console.log(`\x1b[35mDynamoDB Stream retry n°${totalRetry}: ${this.TableName} > ${this.lambdaName}\x1b[0m`);
+      console.log(`\x1b[35mDynamoDB Stream retry n°${totalRetry}: ${this.TableName} |||/ ${this.lambdaName}\x1b[0m`);
       for (const Records of batches) {
         await this.callLambda(batch, Records);
       }

@@ -14,7 +14,7 @@ const buildOptions = {
   bundle: true,
   minify: !shouldWatch,
   entryPoints: ["./src/index.ts", "./src/worker.ts"],
-  external: ["@aws-sdk/client-dynamodb", "@aws-sdk/client-dynamodb-streams"],
+  external: ["@aws-sdk/*"],
   outdir: "dist",
   plugins: [
     {
