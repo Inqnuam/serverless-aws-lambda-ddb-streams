@@ -66,8 +66,7 @@ export class DynamoStream extends EventEmitter {
     let params: GetShardIteratorCommandInput = {
       StreamArn,
       ShardId: Shard.ShardId,
-      ShardIteratorType: "AFTER_SEQUENCE_NUMBER",
-      SequenceNumber: SequenceNumber ?? Shard.SequenceNumberRange!.EndingSequenceNumber ?? Shard.SequenceNumberRange?.StartingSequenceNumber,
+      ShardIteratorType: "LATEST",
     };
     const shardInfo = new GetShardIteratorCommand(params);
 
