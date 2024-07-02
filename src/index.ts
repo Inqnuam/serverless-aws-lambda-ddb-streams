@@ -22,13 +22,16 @@ export const dynamoStream = (clientConfig?: DynamoDBClientConfig | null, config:
   const dynamoOnReady: Function[] = [];
 
   const notifyReadyState = async () => {
+    self.pluginData.isReady = true;
+
     for (const fn of dynamoOnReady) {
       try {
         await fn();
       } catch (error) {}
     }
   };
-  return {
+
+  const self: SlsAwsLambdaPlugin = {
     name: "ddblocal-stream",
     pluginData: {
       onReady: (cb: Function) => {
@@ -38,6 +41,7 @@ export const dynamoStream = (clientConfig?: DynamoDBClientConfig | null, config:
           console.warn("onReady callback must be a function");
         }
       },
+      isReady: false,
     },
     onInit: async function () {
       if (!this.isDeploying && !this.isPackaging) {
@@ -76,4 +80,6 @@ export const dynamoStream = (clientConfig?: DynamoDBClientConfig | null, config:
       },
     },
   };
+
+  return self;
 };
