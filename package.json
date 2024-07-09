@@ -1,6 +1,6 @@
 {
   "name": "serverless-aws-lambda-ddb-streams",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "DynamoDB Local Stream plugin for serverless-aws-lambda",
   "main": "dist/index.js",
   "module": "./dist/index.mjs",
@@ -20,13 +20,13 @@
     "url": "git+https://github.com/inqnuam/serverless-aws-lambda-ddb-streams.git"
   },
   "dependencies": {
-    "@aws-sdk/client-dynamodb": "^3.606.0",
-    "@aws-sdk/client-dynamodb-streams": "^3.606.0"
+    "@aws-sdk/client-dynamodb": "^3.609.0",
+    "@aws-sdk/client-dynamodb-streams": "^3.609.0"
   },
   "devDependencies": {
     "@types/node": "^14.14.31",
     "@types/serverless": "^3.12.22",
-    "serverless-aws-lambda": "^4.8.1",
+    "serverless-aws-lambda": "^4.8.2",
     "typescript": "^5.5.3"
   },
   "scripts": {

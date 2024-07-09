@@ -4,7 +4,7 @@ import type { ClientRequest } from "http";
 
 export class StreamFailure {
   TopicArn: string = "";
-  QueueName: string = "";
+  QueueUrl: string = "";
   functionArn: string = "";
   getTimeoutBody: (DDBStreamBatchInfo: any, approximateInvokeCount: number) => string;
   getUnhandledBody: (DDBStreamBatchInfo: any, approximateInvokeCount: number) => string;
@@ -30,11 +30,12 @@ export class StreamFailure {
         });
       };
     } else {
-      this.QueueName = `arn:aws:sqs:${StreamFailure.REGION}:000000000000:${name}`;
+      this.QueueUrl = `http://localhost:${StreamFailure.LOCAL_PORT}/@sqs/${name}`;
+
       this.getTimeoutBody = this.timeoutFailureSqsMsg;
-      this.getUnhandledBody = (e: any) => "";
+      this.getUnhandledBody = this.unhandledFailureSqsMsg;
       this.createRequest = () => {
-        return http.request(`http://localhost:${StreamFailure.LOCAL_PORT}/@sqs/`, {
+        return http.request(`http://localhost:${StreamFailure.LOCAL_PORT}/@sqs`, {
           method: "POST",
           headers: {
             "Content-Type": "application/x-www-form-urlencoded",
@@ -97,7 +98,7 @@ export class StreamFailure {
     MessageBody.requestContext.condition = "RecordAgeExceeded";
 
     const query = new URLSearchParams();
-    query.append("QueueUrl", this.QueueName);
+    query.append("QueueUrl", this.QueueUrl);
     query.append("Action", "SendMessage");
 
     query.append("MessageBody", JSON.stringify(MessageBody));
@@ -114,7 +115,7 @@ export class StreamFailure {
       functionError: "Unhandled",
     };
     const query = new URLSearchParams();
-    query.append("QueueUrl", this.QueueName);
+    query.append("QueueUrl", this.QueueUrl);
     query.append("Action", "SendMessage");
 
     query.append("MessageBody", JSON.stringify(MessageBody));
