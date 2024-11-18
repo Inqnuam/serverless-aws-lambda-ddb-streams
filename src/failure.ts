@@ -138,7 +138,11 @@ export class StreamFailure {
 }
 const isValidEventId = (id: any) => typeof id == "string" && id.length;
 export const getBatchItemFailures = (records: any[], response?: any) => {
-  if (typeof response === undefined || response === null || (typeof response == "object" && (response.batchItemFailures === null || (Array.isArray(response.batchItemFailures) && !response.batchItemFailures.length)))) {
+  if (
+    typeof response === undefined ||
+    response === null ||
+    (typeof response == "object" && (response.batchItemFailures === null || (Array.isArray(response.batchItemFailures) && !response.batchItemFailures.length)))
+  ) {
     // considered as complete success
     return;
   }

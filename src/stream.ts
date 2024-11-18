@@ -1,4 +1,13 @@
-import { DynamoDBStreamsClient, DescribeStreamCommand, GetShardIteratorCommand, GetRecordsCommand, type Shard, type GetShardIteratorCommandInput, ExpiredIteratorException, StreamViewType } from "@aws-sdk/client-dynamodb-streams";
+import {
+  DynamoDBStreamsClient,
+  DescribeStreamCommand,
+  GetShardIteratorCommand,
+  GetRecordsCommand,
+  ExpiredIteratorException,
+  StreamViewType,
+  type Shard,
+  type GetShardIteratorCommandInput,
+} from "@aws-sdk/client-dynamodb-streams";
 import { DynamoDBClient, DescribeTableCommand, UpdateTableCommand, waitUntilTableExists, type DynamoDBClientConfig } from "@aws-sdk/client-dynamodb";
 import EventEmitter from "events";
 

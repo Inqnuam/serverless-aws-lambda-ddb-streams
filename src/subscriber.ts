@@ -48,7 +48,10 @@ export class Subscriber extends EventEmitter {
   event: any;
   #batches: Batch[] = [];
   #tumblings: TumblingWindow[] = [];
-  static invokationLog: (TableName: string, lambdaName: string) => void = process.env.SLS_DEGUG == "*" ? (TableName: string, lambdaName: string) => console.log(`\x1b[35mDynamoDB Stream:\x1b[0m \x1b[94m${TableName}\x1b[0m \x1b[35m|||/\x1b[0m \x1b[33m${lambdaName}\x1b[0m`) : (TableName: string, lambdaName: string) => void 0;
+  static invokationLog: (TableName: string, lambdaName: string) => void =
+    process.env.SLS_DEGUG == "*"
+      ? (TableName: string, lambdaName: string) => console.log(`\x1b[35mDynamoDB Stream:\x1b[0m \x1b[94m${TableName}\x1b[0m \x1b[35m|||/\x1b[0m \x1b[33m${lambdaName}\x1b[0m`)
+      : (TableName: string, lambdaName: string) => void 0;
   constructor(event: Config, invoke: Invoke, name: string) {
     super();
     this.event = event;
