@@ -4,17 +4,18 @@ import {
   GetShardIteratorCommand,
   GetRecordsCommand,
   ExpiredIteratorException,
-  StreamViewType,
+  TrimmedDataAccessException,
+  ListStreamsCommand,
+  type StreamViewType,
   type Shard,
   type GetShardIteratorCommandInput,
 } from "@aws-sdk/client-dynamodb-streams";
-import { DynamoDBClient, DescribeTableCommand, UpdateTableCommand, waitUntilTableExists, type DynamoDBClientConfig } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, UpdateTableCommand, waitUntilTableExists, type DynamoDBClientConfig } from "@aws-sdk/client-dynamodb";
 import EventEmitter from "events";
 
 export class DynamoStream extends EventEmitter {
   cli: DynamoDBClient;
   streamCli: DynamoDBStreamsClient;
-  watcher?: NodeJS.Timeout;
   TableName: string;
   StreamViewType: StreamViewType = "NEW_AND_OLD_IMAGES";
   #isFirstConnection: boolean = true;
@@ -33,28 +34,81 @@ export class DynamoStream extends EventEmitter {
     }
   }
 
+  private shards: Set<string> = new Set();
   async init() {
     await this.#enableStream();
+    await this.start();
 
-    const LatestStreamArn = await this.getLatestStreamArn();
-    const StreamDescription = await this.describeStream(LatestStreamArn!);
+    setInterval(async () => {
+      try {
+        const StreamDescription = await this.getAvailableStream();
+        if (!StreamDescription?.Shards || !StreamDescription.StreamArn) {
+          return;
+        }
 
-    const { Shards, StreamArn } = StreamDescription!;
+        for (const Shard of StreamDescription?.Shards) {
+          if (!this.shards.has(Shard.ShardId!)) {
+            try {
+              await this.watch(Shard, StreamDescription.StreamArn);
+              this.shards.add(Shard.ShardId!);
+            } catch {}
+          }
+        }
+      } catch (error) {}
+    }, 1000);
+  }
+
+  private async start() {
+    const StreamDescription = await this.getAvailableStream();
+
+    if (!StreamDescription) {
+      return setTimeout(async () => {
+        try {
+          await this.start();
+        } catch {}
+      }, 1000);
+    }
+
+    const { Shards, StreamArn } = StreamDescription;
     if (this.#isFirstConnection) {
       console.log(`✅ Successfully connected to Table "${this.TableName}"`);
       this.#isFirstConnection = false;
     }
 
     if (StreamArn && Shards?.length) {
-      await this.watch(Shards[Shards.length - 1], StreamArn);
+      const Shard = Shards[Shards.length - 1];
+
+      await this.watch(Shard, StreamArn);
+      this.shards.add(Shard.ShardId!);
     }
   }
 
-  async getLatestStreamArn() {
-    const { Table } = await this.cli.send(new DescribeTableCommand({ TableName: this.TableName }));
+  async getAvailableStream() {
+    const cmd = new ListStreamsCommand({ TableName: this.TableName });
+    const { Streams } = await this.streamCli.send(cmd);
+    if (!Streams) {
+      return;
+    }
 
-    return Table!.LatestStreamArn;
+    const streams = await Promise.all(
+      Streams.filter((x) => x.StreamArn).map((x) => {
+        return this.describeStream(x.StreamArn!);
+      })
+    );
+
+    if (!streams) {
+      return;
+    }
+
+    const enabledStreams = streams.filter((x) => x?.StreamStatus == "ENABLED");
+
+    if (!enabledStreams?.length) {
+      return;
+    }
+
+    return enabledStreams[0];
   }
+
   async describeStream(StreamArn: string) {
     const cmd = new DescribeStreamCommand({
       StreamArn,
@@ -63,28 +117,20 @@ export class DynamoStream extends EventEmitter {
     const { StreamDescription } = await this.streamCli.send(cmd);
     return StreamDescription;
   }
-  async getLatestSequenceNumber(Shard: Shard, StreamArn: string) {
-    const ShardIterator = await this.getShardInfo(Shard, StreamArn);
-    const { Records } = await this.getRecords(ShardIterator);
 
-    if (Records?.length) {
-      return Records[Records.length - 1].dynamodb?.SequenceNumber;
-    }
-  }
-  async getShardInfo(Shard: Shard, StreamArn: string, SequenceNumber?: string) {
+  async getShardIterator(Shard: Shard, StreamArn: string, SequenceNumber?: string) {
     let params: GetShardIteratorCommandInput = {
       StreamArn,
       ShardId: Shard.ShardId,
-      ShardIteratorType: "LATEST",
+      ShardIteratorType: "TRIM_HORIZON",
     };
+
     const shardInfo = new GetShardIteratorCommand(params);
 
     const res = await this.streamCli.send(shardInfo);
     return res.ShardIterator;
   }
-  stop() {
-    clearInterval(this.watcher);
-  }
+
   async #enableStream() {
     try {
       await waitUntilTableExists({ client: this.cli, maxWaitTime: DynamoStream.maxWaitTime }, { TableName: this.TableName });
@@ -107,26 +153,25 @@ export class DynamoStream extends EventEmitter {
     const recordCmd = new GetRecordsCommand({
       ShardIterator,
     });
+
     return this.streamCli.send(recordCmd);
   }
   async watch(Shard: Shard, StreamArn: string) {
-    const SequenceNumber = await this.getLatestSequenceNumber(Shard, StreamArn);
-    const ShardIterator = await this.getShardInfo(Shard, StreamArn, SequenceNumber);
-    let iterator = ShardIterator;
+    const startSequenceNumber = Shard.SequenceNumberRange?.StartingSequenceNumber;
+    const endSequenceNumber = Shard.SequenceNumberRange?.EndingSequenceNumber;
 
-    this.watcher = setInterval(async () => {
+    let iterator = await this.getShardIterator(Shard, StreamArn);
+
+    const watcher = setInterval(async () => {
       try {
         const { NextShardIterator, Records } = await this.getRecords(iterator);
-        if (NextShardIterator) {
-          iterator = NextShardIterator;
-        }
 
         if (Records?.length) {
           const dummyDate = new Date().toISOString();
           const DDBStreamBatchInfo = {
             shardId: Shard.ShardId,
-            startSequenceNumber: Shard.SequenceNumberRange?.StartingSequenceNumber,
-            endSequenceNumber: SequenceNumber,
+            startSequenceNumber,
+            endSequenceNumber,
             approximateArrivalOfFirstRecord: dummyDate,
             approximateArrivalOfLastRecord: dummyDate,
             batchSize: Records.length,
@@ -134,10 +179,20 @@ export class DynamoStream extends EventEmitter {
           };
           this.emit("records", Records, DDBStreamBatchInfo);
         }
+
+        if (NextShardIterator) {
+          iterator = NextShardIterator;
+        } else {
+          iterator = undefined;
+          clearInterval(watcher);
+          await this.start();
+        }
       } catch (error: any) {
         if (error instanceof ExpiredIteratorException) {
-          this.stop();
-          await this.init();
+          clearInterval(watcher);
+          await this.start();
+        } else if (error instanceof TrimmedDataAccessException) {
+          iterator = await this.getShardIterator(Shard, StreamArn, Shard.SequenceNumberRange?.StartingSequenceNumber);
         } else {
           console.log(error);
         }

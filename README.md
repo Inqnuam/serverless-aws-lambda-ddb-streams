@@ -141,7 +141,9 @@ functions:
 - ✅ functionResponseType
 - ✅ maximumRecordAgeInSeconds
 - ✅ maximumRetryAttempts
-- ❌ startingPosition (uses always "LATEST")
+- ❌ startingPosition (uses always `TRIM_HORIZON`)
+  - DynamoDB Local dont works well with `LATEST` when multiple Tables are created.
+  - As a workaround recreate a new table before starting the app.
 - ❌ startingPositionTimestamp
 - ✅ tumblingWindowInSeconds
 - ❌ parallelizationFactor
